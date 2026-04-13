@@ -234,8 +234,16 @@ pip install -r requirements.txt
 ### 3. Variables de entorno
 
 ```bash
-cp .env.example .env
-# Editar .env con tus valores reales
+# Conector a base de datos
+DATABASE_URL=postgresql+psycopg://postgres:PASSWORD_VALIDO@direccion_a_base_de_datos_en_aws_rds:5432/blacklist_db
+                                                       
+# Token Bearer estático
+STATIC_TOKEN=aqui_debe_ir_el_token_estatico
+
+# JWT Secret
+JWT_SECRET_KEY=aqui_la_llave_secreta_jwt
+
+# Editar .env con los valores reales para DA
 ```
 
 ### 4. Crear base de datos PostgreSQL
