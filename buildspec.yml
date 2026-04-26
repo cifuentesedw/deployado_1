@@ -29,7 +29,7 @@ phases:
       - echo "Commit $CODEBUILD_RESOLVED_SOURCE_VERSION"
       - echo "Build  $CODEBUILD_BUILD_ID"
       - python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --junit-xml=test-results.xml
-      - echo "=== 20/20 pruebas unitarias PASARON ==="
+      - echo "=== Pruebas unitarias completadas exitosamente ==="
 
   build:
     commands:
