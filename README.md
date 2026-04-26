@@ -9,7 +9,7 @@ Desplegado manualmente sobre **AWS Elastic Beanstalk** con base de datos **AWS R
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                         Cliente (Postman)                         │
+│                         Cliente (Postman)                        │
 └──────────────────────────┬───────────────────────────────────────┘
                            │  HTTPS  (Bearer Token)
                            ▼
@@ -17,11 +17,11 @@ Desplegado manualmente sobre **AWS Elastic Beanstalk** con base de datos **AWS R
 │              AWS Elastic Beanstalk (PaaS)                        │
 │  ┌──────────────────────────────────────────────────────────┐    │
 │  │  EC2  –  Gunicorn  →  Flask Application                  │    │
-│  │                                                           │    │
+│  │                                                          │    │
 │  │   POST  /blacklists          ← BlacklistResource         │    │
 │  │   GET   /blacklists/<email>  ← BlacklistCheckResource    │    │
 │  │   GET   /health                                          │    │
-│  └──────────────────────┬────────────────────────────────────┘    │
+│  └──────────────────────┬───────────────────────────────────┘    │
 │                         │  SQLAlchemy ORM                        │
 └─────────────────────────┼────────────────────────────────────────┘
                           │  TCP 5432
