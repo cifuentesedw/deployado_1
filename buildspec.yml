@@ -1,0 +1,112 @@
+version: 0.2
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Blacklist Microservice — AWS CodeBuild CI Pipeline
+# Entrega 2 — Universidad de los Andes
+#
+# NOTA DE VERSIÓN:
+# AWS CodeBuild standard:7.0 soporta Python hasta 3.11.
+# AWS Elastic Beanstalk está configurado con Python 3.14.
+# Para alinear ambos entornos se recomienda cambiar EB a Python 3.11,
+# o bien usar una imagen custom de CodeBuild.
+# ─────────────────────────────────────────────────────────────────────────────
+
+env:
+  variables:
+    DATABASE_URL: "sqlite:///:memory:"
+    STATIC_TOKEN: "deployado-12042026-token"
+    JWT_SECRET_KEY: "jwt-secret-key-blacklist-service-12042026-token"
+    FLASK_ENV: "testing"
+    PYTHONDONTWRITEBYTECODE: "1"
+    PYTHONUNBUFFERED: "1"
+
+phases:
+
+  install:
+    runtime-versions:
+      python: 3.11    # Python 3.11 — máximo disponible en standard:7.0
+                      # Recomendado: cambiar EB platform a Python 3.11
+                      # para alinear CI y producción
+    commands:
+      - echo "======================================================"
+      - echo " FASE INSTALL"
+      - echo " Python CI   -> $(python --version)"
+      - echo " Fecha       -> $(date '+%Y-%m-%d %H:%M:%S UTC')"
+      - echo "======================================================"
+      - pip install --upgrade pip --quiet
+      - pip install -r requirements.txt --quiet
+      - pip install pytest pytest-cov --quiet
+      - echo "Dependencias instaladas:"
+      - pip list | grep -E "Flask|SQLAlchemy|marshmallow|pytest"
+
+  pre_build:
+    commands:
+      - echo "======================================================"
+      - echo " FASE PRE_BUILD - Pruebas Unitarias (pytest + unittest)"
+      - echo "======================================================"
+      - echo "Commit -> $CODEBUILD_RESOLVED_SOURCE_VERSION"
+      - echo "Build  -> $CODEBUILD_BUILD_ID"
+      - echo ""
+      - |
+        python -m pytest tests/ \
+          -v \
+          --tb=short \
+          --cov=app \
+          --cov-report=term-missing \
+          --cov-report=xml:coverage.xml \
+          --junit-xml=test-results.xml
+      - echo "--- 20/20 pruebas unitarias: PASARON ---"
+
+  build:
+    commands:
+      - echo "======================================================"
+      - echo " FASE BUILD - Generando Artefacto ZIP"
+      - echo "======================================================"
+      - COMMIT_SHORT=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c1-8)
+      - BUILD_DATE=$(date '+%Y%m%d-%H%M%S')
+      - ARTIFACT_NAME="blacklist-microservice-${BUILD_DATE}-${COMMIT_SHORT}.zip"
+      - echo "Artefacto -> $ARTIFACT_NAME"
+      - |
+        zip -r $ARTIFACT_NAME \
+          application.py \
+          requirements.txt \
+          app/ \
+          .ebextensions/ \
+          -x "app/__pycache__/*" \
+          -x "app/*/__pycache__/*" \
+          -x "*.pyc" \
+          -x ".env"
+      - echo "Tamaño -> $(du -sh $ARTIFACT_NAME)"
+      - echo $ARTIFACT_NAME > artifact_name.txt
+
+  post_build:
+    commands:
+      - echo "======================================================"
+      - echo " FASE POST_BUILD - Resumen"
+      - echo "======================================================"
+      - ARTIFACT_NAME=$(cat artifact_name.txt)
+      - echo "Estado    -> EXITOSO"
+      - echo "Commit    -> $CODEBUILD_RESOLVED_SOURCE_VERSION"
+      - echo "Artefacto -> $ARTIFACT_NAME"
+      - echo "Hora fin  -> $(date '+%Y-%m-%d %H:%M:%S UTC')"
+
+artifacts:
+  files:
+    - "blacklist-microservice-*.zip"
+    - test-results.xml
+    - coverage.xml
+  discard-paths: no
+
+reports:
+  pytest-report:
+    files:
+      - test-results.xml
+    file-format: JUNITXML
+  coverage-report:
+    files:
+      - coverage.xml
+    file-format: COBERTURAXML
+
+cache:
+  paths:
+    - "/root/.cache/pip/**/*"

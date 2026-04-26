@@ -20,7 +20,7 @@ ENV/
 
 # AWS EB artifacts
 .elasticbeanstalk/
-.ebextensions/
+#.ebextensions/
 
 # IDE
 .vscode/
@@ -40,3 +40,8 @@ Thumbs.db
 # pruebas
 test_rds.py
 postman_collection.json
+
+# Elastic Beanstalk Files
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml
