@@ -177,9 +177,9 @@ class TestPostBlacklists(BaseTestCase):
         resp = self._post_blacklist("badauth@example.com", headers=INVALID_HEADER)
         self.assertEqual(resp.status_code, 403)
 
-    #def test_fallo_intencional_para_demo_ci(self):
-    #    """Fallo intencional para demo de pipeline CI fallido."""
-    #    self.assertEqual(1, 2, "Fallo intencional: pipeline CI fallido")
+    def test_fallo_intencional_para_demo_ci(self):
+        """Fallo intencional para demo de pipeline CI fallido."""
+        self.assertEqual(1, 2, "Fallo intencional: pipeline CI fallido")
 
 
 # ── Grupo 3: GET /blacklists/<email> ─────────────────────────────────────────
