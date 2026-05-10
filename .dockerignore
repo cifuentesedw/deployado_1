@@ -1,0 +1,56 @@
+# ── Python ───────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.coverage
+coverage.xml
+test-results.xml
+htmlcov/
+
+# ── Virtual environments ─────────────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+
+# ── Variables de entorno locales ─────────────────────────────────────────
+.env
+.env.local
+
+# ── Git ──────────────────────────────────────────────────────────────────
+.git/
+.gitignore
+.github/
+
+# ── Editores / IDE ───────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── AWS Elastic Beanstalk (no se usa en Entrega 3) ───────────────────────
+.elasticbeanstalk/
+.ebextensions/
+
+# ── Archivos del sistema ─────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Tests y documentación (no van en imagen de producción) ───────────────
+tests/
+README.md
+*.md
+postman_collection.json
+
+# ── Artefactos del pipeline (se generan en CI, no en local) ──────────────
+imagedefinitions.json
+imageDetail.json
+appspec.json
+taskdef.json
+buildspec.yml
+*.zip

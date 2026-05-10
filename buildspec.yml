@@ -1,13 +1,34 @@
 version: 0.2
 
+# ─────────────────────────────────────────────────────────────────────────────
+#  Buildspec — Entrega 3 (CI + CD con AWS CodeDeploy + Fargate)
+#  Universidad de los Andes — DevOps
+#  Edwin Alexander Cifuentes Bastidas
+# ─────────────────────────────────────────────────────────────────────────────
+#  Flujo:
+#    INSTALL    → Python 3.11 + pip deps + pytest
+#    PRE_BUILD  → 20 tests unitarios + login a Amazon ECR
+#    BUILD      → docker build (imagen del microservicio)
+#    POST_BUILD → docker push a ECR + genera taskdef.json e imageDetail.json
+# ─────────────────────────────────────────────────────────────────────────────
+#  Variables sensibles (NO committeadas, definidas en CodeBuild project):
+#    DATABASE_URL_PROD  → URL completa de Postgres (Plaintext o Parameter Store)
+# ─────────────────────────────────────────────────────────────────────────────
+
 env:
   variables:
-    DATABASE_URL: "sqlite:///:memory:"
-    STATIC_TOKEN: "deployado-12042026-token"
-    JWT_SECRET_KEY: "jwt-secret-key-blacklist-service-12042026-token"
-    FLASK_ENV: "testing"
+    # ── Variables para los tests (SQLite en memoria, sin RDS en CI) ─────────
+    DATABASE_URL:           "sqlite:///:memory:"
+    STATIC_TOKEN:           "deployado-12042026-token"
+    JWT_SECRET_KEY:         "jwt-secret-key-blacklist-service-12042026-token"
+    FLASK_ENV:              "testing"
     PYTHONDONTWRITEBYTECODE: "1"
-    PYTHONUNBUFFERED: "1"
+    PYTHONUNBUFFERED:       "1"
+
+    # ── Variables para Docker / ECR / CodeDeploy ────────────────────────────
+    AWS_DEFAULT_REGION:     "us-east-2"
+    IMAGE_REPO_NAME:        "blacklist-microservice"
+    CONTAINER_NAME:         "blacklist-container"
 
 phases:
 
@@ -17,6 +38,7 @@ phases:
     commands:
       - echo "=== FASE INSTALL ==="
       - echo "Python version $(python --version)"
+      - echo "Docker  version $(docker --version)"
       - echo "Fecha $(date '+%Y-%m-%d %H:%M:%S UTC')"
       - pip install --upgrade pip --quiet
       - pip install -r requirements.txt --quiet
@@ -25,36 +47,113 @@ phases:
 
   pre_build:
     commands:
-      - echo "=== FASE PRE_BUILD - Pruebas Unitarias ==="
+      - echo "=== FASE PRE_BUILD - Pruebas Unitarias + Login ECR ==="
       - echo "Commit $CODEBUILD_RESOLVED_SOURCE_VERSION"
       - echo "Build  $CODEBUILD_BUILD_ID"
+
+      # ── Pruebas unitarias (si fallan, el pipeline se detiene) ─────────────
       - python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --junit-xml=test-results.xml
       - echo "=== Pruebas unitarias completadas exitosamente ==="
 
+      # ── Resolución de variables ─────────────────────────────────────────────
+      - export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - export REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME
+      - export IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c1-8)
+      - echo "Repository URI $REPOSITORY_URI"
+      - echo "Image tag      $IMAGE_TAG"
+
+      # ── Validar que existe la variable de la base de datos productiva ──────
+      - |
+        if [ -z "$DATABASE_URL_PROD" ]; then
+          echo "ERROR: DATABASE_URL_PROD no esta definida en CodeBuild Environment Variables"
+          echo "Configurala en: CodeBuild -> Project -> Edit -> Environment -> Additional configuration -> Environment variables"
+          exit 1
+        fi
+        echo "DATABASE_URL_PROD definida (longitud $(echo -n $DATABASE_URL_PROD | wc -c) chars)"
+
+      # ── Login a Amazon ECR ──────────────────────────────────────────────────
+      - echo "Login a Amazon ECR..."
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+
   build:
     commands:
-      - echo "=== FASE BUILD - Generando Artefacto ==="
-      - export COMMIT_SHORT=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c1-8)
-      - export BUILD_DATE=$(date '+%Y%m%d-%H%M%S')
-      - export ARTIFACT_NAME="blacklist-microservice-${BUILD_DATE}-${COMMIT_SHORT}.zip"
-      - echo "Artefacto $ARTIFACT_NAME"
-      - zip -r $ARTIFACT_NAME application.py requirements.txt app/ .ebextensions/ -x "app/__pycache__/*" -x "app/*/__pycache__/*" -x "*.pyc" -x ".env"
-      - echo "Tamano $(du -sh $ARTIFACT_NAME)"
-      - echo $ARTIFACT_NAME > artifact_name.txt
-      - echo "=== Artefacto generado exitosamente ==="
+      - echo "=== FASE BUILD - Construyendo imagen Docker ==="
+      - docker build -t $IMAGE_REPO_NAME:$IMAGE_TAG .
+      - docker tag  $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:$IMAGE_TAG
+      - docker tag  $IMAGE_REPO_NAME:$IMAGE_TAG $REPOSITORY_URI:latest
+      - echo "Imagenes Docker construidas y etiquetadas"
 
   post_build:
     commands:
-      - echo "=== FASE POST_BUILD - Resumen ==="
-      - export ARTIFACT_NAME=$(cat artifact_name.txt)
+      - echo "=== FASE POST_BUILD - Push ECR + Artefactos ==="
+
+      # ── Push de la imagen a Amazon ECR ─────────────────────────────────────
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - docker push $REPOSITORY_URI:latest
+      - echo "Imagen publicada $REPOSITORY_URI:$IMAGE_TAG"
+
+      # ── Artefactos para CodeDeploy (Blue/Green sobre ECS) ──────────────────
+      # imagedefinitions.json — usado por CodePipeline standard ECS deploy
+      - printf '[{"name":"%s","imageUri":"%s"}]' $CONTAINER_NAME $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+      # imageDetail.json — usado por CodeDeploy Blue/Green para reemplazar IMAGE1_NAME en taskdef.json
+      - printf '{"ImageURI":"%s"}' $REPOSITORY_URI:$IMAGE_TAG > imageDetail.json
+
+      # ── Generar taskdef.json dinámicamente (no esta en repo por contener creds) ──
+      - |
+        cat > taskdef.json <<EOF
+        {
+          "family": "task-blacklist-fargate",
+          "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole",
+          "networkMode": "awsvpc",
+          "requiresCompatibilities": ["FARGATE"],
+          "cpu": "1024",
+          "memory": "2048",
+          "containerDefinitions": [
+            {
+              "name": "${CONTAINER_NAME}",
+              "image": "<IMAGE1_NAME>",
+              "essential": true,
+              "portMappings": [
+                { "containerPort": 5000, "hostPort": 5000, "protocol": "tcp" }
+              ],
+              "environment": [
+                { "name": "DATABASE_URL",   "value": "${DATABASE_URL_PROD}" },
+                { "name": "STATIC_TOKEN",   "value": "${STATIC_TOKEN}" },
+                { "name": "JWT_SECRET_KEY", "value": "${JWT_SECRET_KEY}" },
+                { "name": "FLASK_ENV",      "value": "production" }
+              ],
+              "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                  "awslogs-group":         "/ecs/blacklist-microservice",
+                  "awslogs-region":        "${AWS_DEFAULT_REGION}",
+                  "awslogs-stream-prefix": "ecs",
+                  "awslogs-create-group":  "true"
+                }
+              }
+            }
+          ]
+        }
+        EOF
+
+      - echo "taskdef.json generado correctamente"
+      - echo ""
+      - echo "imagedefinitions.json"
+      - cat imagedefinitions.json
+      - echo ""
+      - echo "imageDetail.json"
+      - cat imageDetail.json
+      - echo ""
+
       - echo "Estado    EXITOSO"
-      - echo "Commit    $CODEBUILD_RESOLVED_SOURCE_VERSION"
-      - echo "Artefacto $ARTIFACT_NAME"
       - echo "Hora fin  $(date '+%Y-%m-%d %H:%M:%S UTC')"
 
 artifacts:
   files:
-    - "blacklist-microservice-*.zip"
+    - imagedefinitions.json
+    - imageDetail.json
+    - appspec.json
+    - taskdef.json
     - test-results.xml
     - coverage.xml
   discard-paths: no

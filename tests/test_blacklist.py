@@ -46,7 +46,7 @@ class BaseTestCase(unittest.TestCase):
         db.drop_all()
         self.ctx.pop()
 
-    def _post_blacklist(self, email, uuid=TEST_UUID, reason="Spam", headers=None):
+    def _post_blacklist(self, email, uuid=TEST_UUID, reason: str | None = "Spam", headers=None):
         if headers is None:
             headers = AUTH_HEADER
         payload = {"email": email, "app_uuid": uuid}
