@@ -56,12 +56,7 @@ def create_app(config_name=None):
 
     @app.route("/health", methods=["GET"])
     def health():
-        #return jsonify({"status": "healthy", "service": "blacklist-microservice"}), 200
-        return jsonify({
-            "service": "blacklist-microservice",
-            "status": "unhealthy",
-            "reason": "Fallo intencional para demo Ejecucion 3 - rollback CD"
-        }), 500
+        return jsonify({"status": "healthy", "service": "blacklist-microservice"}), 200
 
     with app.app_context():
         if db_url.startswith("postgresql"):

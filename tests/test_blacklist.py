@@ -64,18 +64,18 @@ class BaseTestCase(unittest.TestCase):
 
 class TestHealthEndpoint(BaseTestCase):
 
-    # def test_health_returns_200(self):
-    #     """GET /health debe retornar HTTP 200."""
-    #     resp = self.client.get("/health")
-    #     self.assertEqual(resp.status_code, 200)
+    def test_health_returns_200(self):
+        """GET /health debe retornar HTTP 200."""
+        resp = self.client.get("/health")
+        self.assertEqual(resp.status_code, 200)
 
-    # def test_health_returns_json_with_status(self):
-    #     """GET /health debe retornar JSON con status 'healthy'."""
-    #     resp = self.client.get("/health")
-    #     data = resp.get_json()
-    #     self.assertIsNotNone(data)
-    #     self.assertEqual(data["status"], "healthy")
-    #     self.assertEqual(data["service"], "blacklist-microservice")
+    def test_health_returns_json_with_status(self):
+        """GET /health debe retornar JSON con status 'healthy'."""
+        resp = self.client.get("/health")
+        data = resp.get_json()
+        self.assertIsNotNone(data)
+        self.assertEqual(data["status"], "healthy")
+        self.assertEqual(data["service"], "blacklist-microservice")
 
     def test_health_no_requiere_autenticacion(self):
         """GET /health no debe requerir token de autorización."""
