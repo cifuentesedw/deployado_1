@@ -1,18 +1,20 @@
 version: 0.2
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Buildspec — Entrega 3 (CI + CD con AWS CodeDeploy + Fargate)
+#  Buildspec — Entrega 4 (Monitoreo Continuo con New Relic)
 #  Universidad de los Andes — DevOps
 #  Edwin Alexander Cifuentes Bastidas
 # ─────────────────────────────────────────────────────────────────────────────
 #  Flujo:
-#    INSTALL    → Python 3.11 + pip deps + pytest
-#    PRE_BUILD  → 20 tests unitarios + login a Amazon ECR
-#    BUILD      → docker build (imagen del microservicio)
+#    INSTALL    → Python 3.11 + pip deps (incluye newrelic) + pytest
+#    PRE_BUILD  → tests unitarios + login a Amazon ECR + validación de secretos
+#    BUILD      → docker build (imagen del microservicio con agente New Relic)
 #    POST_BUILD → docker push a ECR + genera taskdef.json e imageDetail.json
 # ─────────────────────────────────────────────────────────────────────────────
-#  Variables sensibles (NO committeadas, definidas en CodeBuild project):
-#    DATABASE_URL_PROD  → URL completa de Postgres (Plaintext o Parameter Store)
+#  Variables sensibles (NO committeadas, definidas en CodeBuild project como
+#  Parameter type, resueltas desde AWS SSM Parameter Store):
+#    DATABASE_URL_PROD          → /blacklist/prod/database_url
+#    NEW_RELIC_LICENSE_KEY_PROD → /blacklist/prod/new_relic_license_key  (E4)
 # ─────────────────────────────────────────────────────────────────────────────
 
 env:
@@ -71,6 +73,15 @@ phases:
         fi
         echo "DATABASE_URL_PROD definida (longitud $(echo -n $DATABASE_URL_PROD | wc -c) chars)"
 
+      # ── Validar que existe la licencia de New Relic (Entrega 4) ─────────────
+      - |
+        if [ -z "$NEW_RELIC_LICENSE_KEY_PROD" ]; then
+          echo "ERROR: NEW_RELIC_LICENSE_KEY_PROD no esta definida en CodeBuild Environment Variables"
+          echo "Configurala como Parameter -> /blacklist/prod/new_relic_license_key"
+          exit 1
+        fi
+        echo "NEW_RELIC_LICENSE_KEY_PROD definida (longitud $(echo -n $NEW_RELIC_LICENSE_KEY_PROD | wc -c) chars)"
+
       # ── Login a Amazon ECR ──────────────────────────────────────────────────
       - echo "Login a Amazon ECR..."
       - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
@@ -120,7 +131,15 @@ phases:
                 { "name": "DATABASE_URL",   "value": "${DATABASE_URL_PROD}" },
                 { "name": "STATIC_TOKEN",   "value": "${STATIC_TOKEN}" },
                 { "name": "JWT_SECRET_KEY", "value": "${JWT_SECRET_KEY}" },
-                { "name": "FLASK_ENV",      "value": "production" }
+                { "name": "FLASK_ENV",      "value": "production" },
+
+                { "name": "NEW_RELIC_LICENSE_KEY",                 "value": "${NEW_RELIC_LICENSE_KEY_PROD}" },
+                { "name": "NEW_RELIC_APP_NAME",                    "value": "blacklist-microservice-prod" },
+                { "name": "NEW_RELIC_LOG",                         "value": "stdout" },
+                { "name": "NEW_RELIC_LOG_LEVEL",                   "value": "info" },
+                { "name": "NEW_RELIC_DISTRIBUTED_TRACING_ENABLED", "value": "true" },
+                { "name": "NEW_RELIC_MONITOR_MODE",                "value": "true" },
+                { "name": "NEW_RELIC_HIGH_SECURITY",               "value": "false" }
               ],
               "logConfiguration": {
                 "logDriver": "awslogs",

@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  Blacklist Microservice — Dockerfile
-#  Universidad de los Andes — DevOps Entrega 3
+#  Universidad de los Andes — DevOps Entrega 4 (Monitoreo Continuo con New Relic)
 #  Edwin Alexander Cifuentes Bastidas
 # ─────────────────────────────────────────────────────────────────────────────
 FROM python:3.11-slim
@@ -38,8 +38,12 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -f http://localhost:5000/health || exit 1
 
-# Servidor WSGI de producción
-CMD ["gunicorn", \
+# Servidor WSGI de producción envuelto con el agente New Relic (Entrega 4)
+# La inicialización del agente se realiza vía wrapper newrelic-admin run-program,
+# manteniendo el código fuente Python sin acoplamiento con la herramienta APM.
+# Las variables de configuración (NEW_RELIC_*) se inyectan vía taskdef.json en runtime.
+CMD ["newrelic-admin", "run-program", \
+     "gunicorn", \
      "--bind", "0.0.0.0:5000", \
      "--workers", "2", \
      "--threads", "2", \
